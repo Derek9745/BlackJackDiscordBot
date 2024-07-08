@@ -1,15 +1,21 @@
 ﻿
+using DSharpPlus.Entities;
+using DSharpPlus.Interactivity.Extensions;
+using DSharpPlus;
+using DSharpPlus.SlashCommands;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using DSharpPlus.EventArgs;
+using System.Runtime.Remoting.Messaging;
 //using static BlackJackSimulator;
 
 
 namespace BlackJackDiscordBot
 {
-    internal class BlackJackSimulator
+    public class BlackJackSimulator
     {
-        bool stillPlaying = true;
         public List<Player> currentPlayerList = new List<Player>();
         Dealer dealer = new Dealer(new List<Card>(), "Dealer", 0);
         public Deck currentDeck = new Deck();
@@ -52,11 +58,10 @@ namespace BlackJackDiscordBot
             public Suit Suit;
             public bool isVisible;
 
-            public Card(Rank rank, Suit suit, bool isVisible)
+            public Card(Rank rank, Suit suit)
             {
                 Suit = suit;
                 Rank = rank;
-                this.isVisible = isVisible;
             }
         }
 
@@ -79,50 +84,27 @@ namespace BlackJackDiscordBot
             public Dealer(List<Card> hand, string playerName, int currentCardValue) : base(hand, playerName, currentCardValue) { }
         }
 
-        public string getDeckSize()
+        public async Task<DiscordEmbedBuilder> GameSetup()
         {
-            string deckSize = Convert.ToString(currentDeck.deck.Count);
-            return deckSize;
-        }
-
-        public string gameSetup()
-        {
-            numberOfPlayers(1,currentPlayerList);
+            Player player = new Player(new List<Card>(), "Player", 0);
+            currentPlayerList.Add(player);
+            currentPlayerList.Add(dealer);
             currentPlayer = currentPlayerList[0];
             generateCards(cardList);
             currentDeck.loadDeck(cardList);
-            string StartingInfo = "Starting deck size: " + Convert.ToString(currentDeck.deck.Count);
             dealHands(currentPlayerList, currentDeck);
+            calculatePlayerCardValue(currentPlayer);
 
-            return StartingInfo;
-        }
-
-        public void startGame()
-        {
-            while (stillPlaying == true)
+           
+            var embed = new DiscordEmbedBuilder()
             {
-                // show all visible cards in play on the board;
-                showPlayerCardValues(currentPlayerList);
-                string output = "1 - Hit\n2 -Stay\n3 -Surrender";
-                switch (Convert.ToInt32(Console.ReadLine()))
-                {
-                    case 1:
-                        hit(currentPlayer, currentDeck);
-                        break;
-                    case 2:
-                        // no change, pass to next player;
-                        stay();
-                        dealerTurn(currentPlayerList.Find(x => x.playerName == "Dealer"), currentDeck);
-                        break;
-                    case 3:
-                        surrender();
-                        break;
-                    default:
-                        Console.WriteLine("Invalid command. Please enter 1, 2, or 3.");
-                        break;
+                Title = "Game Started",
+                Description = $"Starting deck size: 52" +
+                $"\n Current deck size: {currentDeck.deck.Count}" +
+                $"\n {currentPlayer.playerName} hand:--- current card value:{currentPlayer.currentCardValue}"
+            };
 
-                }
-            }
+            return embed;
         }
 
         public void generateCards(List<Card> cardlist)
@@ -132,7 +114,7 @@ namespace BlackJackDiscordBot
                 foreach (Rank rank in Enum.GetValues(typeof(Rank)))
                 {
                     //add new card combination to the cardlist
-                    cardList.Add(new Card(rank, suit, false));
+                    cardList.Add(new Card(rank, suit));
                 }
             }
         }
@@ -144,55 +126,64 @@ namespace BlackJackDiscordBot
                 player.hand.Clear();
                 player.hand.Add(currentDeck.deck[0]);
                 currentDeck.deck.RemoveAt(0);
-            }
-            foreach (var player in currentPlayerList)
-            {
-                //still need to check that this portion of code works correctly
-                currentDeck.deck[0].isVisible = true;
                 player.hand.Add(currentDeck.deck[0]);
-                //set this card to visible
                 currentDeck.deck.RemoveAt(0);
             }
         }
 
-        public void hit(Player currentPlayer, Deck currentDeck)
+        public async Task<DiscordEmbedBuilder> Hit(ComponentInteractionCreateEventArgs args)
         {
-            Console.WriteLine("Adding another card to turn players hand");
             currentPlayer.hand.Add((currentDeck.deck[0]));
             currentDeck.deck.RemoveAt(0);
-            calculatePlayerCardValue(currentPlayer);
-            Console.WriteLine("Current deck size: " + Convert.ToString(currentDeck.deck.Count));
+            var cardValue = calculatePlayerCardValue(currentPlayer);
 
-            if (currentPlayer.currentCardValue == 21)
+            if (cardValue< 21)
             {
-                calculatePlayerCardValue(currentPlayer);
-                Console.WriteLine("Current deck size: " + Convert.ToString(currentDeck.deck.Count));
-                Console.WriteLine("Congratulations! You Win!");
-                stillPlaying = false;
+                var embed = new DiscordEmbedBuilder()
+                {
+                    Description = "Current deck size: " + Convert.ToString(currentDeck.deck.Count) +
+                    $"\n {args.User.Username} hand: ------ current card value:{cardValue}"
+                };
+
+                return embed;
 
             }
-            else if (currentPlayer.currentCardValue > 21)
+            else if (cardValue == 21)
             {
-                Console.WriteLine("You exceeded 21!");
-                showPlayerCardValues(currentPlayerList);
-                stillPlaying = false;
+                var embed = new DiscordEmbedBuilder()
+                {
+                    Title = "21! Congratulations, You Win!",
+                    Description = "Current deck size: " + Convert.ToString(currentDeck.deck.Count) +
+                    $"\n {args.User.Username} hand:  ---- current card value:{cardValue}"
+                };
 
+                return embed;
+                
+            }
+            else if (cardValue > 21)
+            {
+                var embed = new DiscordEmbedBuilder()
+                {
+                    Title = "You Exceeded 21! You Lose!",
+                    Description = "Current deck size: " + Convert.ToString(currentDeck.deck.Count) +
+                    $"\n {args.User.Username} hand:  ----- current card value:{cardValue}"
+                };
+
+                return embed;
+            }
+            else
+            {
+                // Handle other cases if necessary, or return null if no embed is needed.
+                return null;
             }
         }
 
-        public void stay()
-        {
-            Console.WriteLine("Turn player chooses to stay");
-        }
+        
 
-        public void surrender()
+        public string getDeckSize()
         {
-            //withdraw from game, if only player, dealor wins and exit game
-            if (currentPlayerList.Count == 1)
-            {
-                Console.WriteLine("Player forefeits. Dealor Wins!");
-                Environment.Exit(0);
-            }
+            string deckSize = Convert.ToString(currentDeck.deck.Count);
+            return deckSize;
         }
 
         public int calculatePlayerCardValue(Player currentPlayer)
@@ -220,84 +211,40 @@ namespace BlackJackDiscordBot
             }
             return currentPlayer.currentCardValue;
         }
-
-        public void showPlayerCardValues(List<Player> currentPlayerList)
+   
+        public async Task<DiscordEmbedBuilder> DealerTurn(ComponentInteractionCreateEventArgs args)
         {
-            foreach (var player in currentPlayerList)
-            {
-                player.currentCardValue = 0;
-                foreach (var card in player.hand)
-                {
-                    // currently the value of all cards will be shown, even if not visible for testing purposes.
-                    player.currentCardValue += Convert.ToInt32(card.Rank);
 
-                    Console.WriteLine("Card: " + Convert.ToString(Convert.ToInt32(card.Rank)) + " of " + Convert.ToString(card.Suit) + "s");
-                }
-                if (player.currentCardValue > 21)
-                {
-                    foreach (var card in player.hand)
-                    {
-                        if (card.Rank == Rank.Ace)
-                        {
-                            player.currentCardValue -= 10;
-                            if (player.currentCardValue <= 21)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
-                Console.WriteLine("Player Name: " + player.playerName + ". Total Card Value: " + player.currentCardValue);
+            while (dealer.currentCardValue <= 16)
+            {
+                dealer.hand.Add(currentDeck.deck[0]);
+                currentDeck.deck.RemoveAt(0);
+                calculatePlayerCardValue(dealer);
+                await Task.Delay(1000);
             }
-        }
 
-        public int numberOfPlayers(int numberOfPlayers, List<Player> currentPlayerList)
-        {
-            for (int i = 0; i < numberOfPlayers; i++)
+
+            var embed = new DiscordEmbedBuilder()
             {
-                string playerNumber = (i + 1).ToString();
-                Player player = new Player(new List<Card>(), "Player" + playerNumber, 0);
-                currentPlayerList.Add(player);
-            }
-            currentPlayerList.Add(dealer);
-            return numberOfPlayers;
-        }
-        public int countPlayers(List<Player> currentPlayerList)
-        {
-            int count = 0;
-            foreach (var player in currentPlayerList)
+                Description = $"Dealer hand: ---- current card value: {dealer.currentCardValue}"
+            };
+
+            if (dealer.currentCardValue > 21)
             {
-                count += 1;
+                embed.Title = "Dealer Exceeded 21! You Win!";
             }
-            return count;
+            else if (dealer.currentCardValue >= currentPlayer.currentCardValue)
+            {
+                embed.Title = "Dealer Wins!";
+            }
+            else
+            {
+                embed.Title = "You Win!";
+            }
+
+            return embed;
         }
 
-        public void dealerTurn(Player dealer, Deck currentDeck)
-        {
-            if (dealer.currentCardValue <= 16)
-            {
-                while (dealer.currentCardValue <= 16)
-                {
-                    hit(dealer, currentDeck);
-                }
-            }
-            else if (dealer.currentCardValue > 16)
-            {
-                stay();
-                return;
-            }
-        }
-        public int input()
-        {
-            try
-            {
-                return Convert.ToInt32(Console.ReadLine());
-            }
-            catch (Exception)
-            {
-                Console.WriteLine("Answer must be a numerical input. Please Try Again");
-                return input();
-            }
-        }
     }
+    
 }

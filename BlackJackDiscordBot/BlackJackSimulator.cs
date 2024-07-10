@@ -9,6 +9,8 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using DSharpPlus.EventArgs;
 using System.Runtime.Remoting.Messaging;
+using System.Linq;
+using System.Text;
 //using static BlackJackSimulator;
 
 
@@ -21,6 +23,10 @@ namespace BlackJackDiscordBot
         public Deck currentDeck = new Deck();
         public Player currentPlayer = null;
         public List<Card> cardList = new List<Card>();
+        StringBuilder playerHand = new StringBuilder();
+        StringBuilder dealerHand = new StringBuilder();
+
+
 
         public enum Suit { Heart, Diamond, Spade, Club };
         public enum Rank { Ace = 11, Two = 2, Three = 3, Four = 4, Five = 5, Six = 6, Seven = 7, Eight = 8, Nine = 9, Ten = 10, Jack = 10, Queen = 10, King = 10 };
@@ -86,6 +92,7 @@ namespace BlackJackDiscordBot
 
         public async Task<DiscordEmbedBuilder> GameSetup()
         {
+
             Player player = new Player(new List<Card>(), "Player", 0);
             currentPlayerList.Add(player);
             currentPlayerList.Add(dealer);
@@ -94,14 +101,19 @@ namespace BlackJackDiscordBot
             currentDeck.loadDeck(cardList);
             dealHands(currentPlayerList, currentDeck);
             calculatePlayerCardValue(currentPlayer);
-
+            calculatePlayerCardValue(dealer);
+            getPlayerHand();
+            getDealerhand();
            
+
             var embed = new DiscordEmbedBuilder()
             {
                 Title = "Game Started",
                 Description = $"Starting deck size: 52" +
                 $"\n Current deck size: {currentDeck.deck.Count}" +
-                $"\n {currentPlayer.playerName} hand:--- current card value:{currentPlayer.currentCardValue}"
+                $"\n {currentPlayer.playerName} hand:\n {playerHand} Current card value:{currentPlayer.currentCardValue}" +
+                $"\n Dealer Hand:\n" +
+                $"{dealerHand} Dealer card value: {dealer.currentCardValue}"
             };
 
             return embed;
@@ -137,13 +149,22 @@ namespace BlackJackDiscordBot
             currentDeck.deck.RemoveAt(0);
             var cardValue = calculatePlayerCardValue(currentPlayer);
 
+
+            getPlayerHand();
+            getDealerhand();
+
             if (cardValue< 21)
             {
                 var embed = new DiscordEmbedBuilder()
                 {
-                    Description = "Current deck size: " + Convert.ToString(currentDeck.deck.Count) +
-                    $"\n {args.User.Username} hand: ------ current card value:{cardValue}"
+                    Description = $"Current deck size: {currentDeck.deck.Count}"+
+                    $"\n {args.User.Username} hand:\n {playerHand} Current card value:{cardValue}" +
+                    $"\n Dealer Hand:\n" +
+                    $"{dealerHand} Dealer card value: {dealer.currentCardValue}"
+
                 };
+
+
 
                 return embed;
 
@@ -153,9 +174,14 @@ namespace BlackJackDiscordBot
                 var embed = new DiscordEmbedBuilder()
                 {
                     Title = "21! Congratulations, You Win!",
-                    Description = "Current deck size: " + Convert.ToString(currentDeck.deck.Count) +
-                    $"\n {args.User.Username} hand:  ---- current card value:{cardValue}"
+                    Description = $"Current deck size: {currentDeck.deck.Count}" +
+                    $"\n {args.User.Username} hand:\n {playerHand} Current card value:{cardValue}" +
+                    $"\n Dealer Hand:\n" +
+                    $"{dealerHand} Dealer card value: {dealer.currentCardValue}"
+
                 };
+
+               
 
                 return embed;
                 
@@ -165,10 +191,13 @@ namespace BlackJackDiscordBot
                 var embed = new DiscordEmbedBuilder()
                 {
                     Title = "You Exceeded 21! You Lose!",
-                    Description = "Current deck size: " + Convert.ToString(currentDeck.deck.Count) +
-                    $"\n {args.User.Username} hand:  ----- current card value:{cardValue}"
+                    Description = $"Current deck size: {currentDeck.deck.Count}" +
+                    $"\n {args.User.Username} hand:\n {playerHand} Current card value:{cardValue}" +
+                    $"\n Dealer Hand:\n" +
+                    $"{dealerHand} Dealer card value: {dealer.currentCardValue}"
+                    
                 };
-
+               
                 return embed;
             }
             else
@@ -178,7 +207,58 @@ namespace BlackJackDiscordBot
             }
         }
 
+        public void resetGame()
+        {
+            foreach (var card in currentPlayer.hand)
+            {
+                if (card != null)
+                {
+                    currentDeck.deck.Add(card);
+                    currentPlayer.hand.Remove(card);
+                } 
+            }
+            foreach (var card in dealer.hand)
+            {
+                if (card != null)
+                {
+                    currentDeck.deck.Add(card);
+                    dealer.hand.Remove(card);
+                }
+               
+            }
+            calculatePlayerCardValue(currentPlayer);
+            calculatePlayerCardValue(dealer);
+
+
+        }
+
+        public StringBuilder getPlayerHand()
+        {
+
+            playerHand.Clear();
+            foreach (var card in currentPlayer.hand)
+            {
+                
+                playerHand.Append($"{card.Rank} of {card.Suit}'s\n");
+
+            }
+
+            return playerHand;
+        }
         
+        public StringBuilder getDealerhand()
+        {
+
+            dealerHand.Clear();
+            foreach (var card in dealer.hand)
+            {
+                
+                dealerHand.Append($"{card.Rank} of {card.Suit}'s\n");
+
+            }
+
+            return dealerHand;
+        }
 
         public string getDeckSize()
         {
@@ -224,22 +304,27 @@ namespace BlackJackDiscordBot
             }
 
 
+            getDealerhand();
+           
             var embed = new DiscordEmbedBuilder()
             {
-                Description = $"Dealer hand: ---- current card value: {dealer.currentCardValue}"
+                Description = $"Dealer hand:\n {dealerHand} Dealer card value: {dealer.currentCardValue}"
             };
 
             if (dealer.currentCardValue > 21)
             {
                 embed.Title = "Dealer Exceeded 21! You Win!";
+                
             }
             else if (dealer.currentCardValue >= currentPlayer.currentCardValue)
             {
                 embed.Title = "Dealer Wins!";
+               
             }
             else
             {
                 embed.Title = "You Win!";
+                
             }
 
             return embed;

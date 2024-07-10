@@ -28,6 +28,7 @@ namespace BlackJackDiscordBot.Slash
 
             var embed2 = await blackJackSimulator.GameSetup();
 
+
             await ctx.EditResponseAsync(new DiscordWebhookBuilder()
                 .AddEmbed(embed)
                 .AddEmbed(embed2)

@@ -75,16 +75,35 @@ namespace BlackJackDiscordBot
 
         private static async Task Client_ComponentInteractionCreated(DiscordClient sender, ComponentInteractionCreateEventArgs args)
         {
+            var hitButton = new DiscordButtonComponent(ButtonStyle.Primary, "hit", "Hit");
+            var stayButton = new DiscordButtonComponent(ButtonStyle.Primary, "stay", "Stay");
+            var surrenderButton = new DiscordButtonComponent(ButtonStyle.Primary, "surrender", "Surrender");
+
+
+
+
             switch (args.Interaction.Data.CustomId)
             {
                 case "hit":
                     await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent($"{args.User.Username} has chosen to hit. Adding another card to the hand."));
                     var embed = await BasicSlashCommands.blackJackSimulator.Hit(args);
-                    await args.Interaction.CreateFollowupMessageAsync(new DiscordFollowupMessageBuilder().AddEmbed(embed));
+                    if (BasicSlashCommands.blackJackSimulator.currentPlayer.currentCardValue < 21)
+                    {
+                        await args.Interaction.CreateFollowupMessageAsync(new DiscordFollowupMessageBuilder()
+                            .AddEmbed(embed)
+                            .AddComponents(hitButton, stayButton, surrenderButton));
+                    }
+                    else
+                    {
+                        await args.Interaction.CreateFollowupMessageAsync(new DiscordFollowupMessageBuilder()
+                            .AddEmbed(embed));
+                        
+                    }
                     break;
                 case "stay":
                     await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent($"{args.User.Username} has chosen to stay"));
-                    await BasicSlashCommands.blackJackSimulator.DealerTurn(args);
+                    var embed2 = await BasicSlashCommands.blackJackSimulator.DealerTurn(args);
+                    await args.Interaction.CreateFollowupMessageAsync(new DiscordFollowupMessageBuilder().AddEmbed(embed2));
                     break;
                 case "surrender":
                     await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().WithContent($"{args.User.Username} has chosen to surrender"));
